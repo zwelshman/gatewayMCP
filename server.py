@@ -70,12 +70,11 @@ def _fmt(data: dict) -> str:
 
 def _paginated_summary(data: dict, item_key: str = "data") -> str:
     """Return a readable summary of a paginated list response."""
-    meta = data.get("meta", {})
     items = data.get(item_key, data.get("data", []))
-    total = meta.get("total", len(items))
-    per_page = meta.get("per_page", len(items))
-    current_page = meta.get("current_page", 1)
-    last_page = meta.get("last_page", 1)
+    total = data.get("total", len(items))
+    per_page = data.get("per_page", len(items))
+    current_page = data.get("current_page", 1)
+    last_page = data.get("last_page", 1)
 
     header = (
         f"Found {total} result(s)  |  "
@@ -95,13 +94,8 @@ def search_datasets(
     query: Optional[str] = None,
     page: int = 1,
     per_page: int = 10,
-    data_custodian_id: Optional[int] = None,
-    geographic_coverage: Optional[str] = None,
-    publisher: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    sort_by: Optional[str] = None,
-    sort_direction: Optional[str] = None,
+    status: Optional[str] = None,
+    sort: Optional[str] = None,
 ) -> str:
     """Search the HDRUK Gateway for Datasets & BioSamples.
 
@@ -110,30 +104,18 @@ def search_datasets(
     and unique persistent identifiers (PIDs).
 
     Args:
-        query: Free-text search term (searches title, abstract, keywords,
-               and enriched medical terms such as ICD-10, SNOMED, OMOP).
+        query: Free-text search term (filters dataset titles by 3+ characters).
         page: Page number to retrieve (default 1).
         per_page: Results per page (default 10, max 100).
-        data_custodian_id: Filter by a specific data custodian / publisher ID.
-        geographic_coverage: Filter by geographic coverage (e.g. "England",
-                             "Wales", "Scotland", "United Kingdom").
-        publisher: Filter by publisher name (partial match).
-        start_date: Filter datasets updated after this date (YYYY-MM-DD).
-        end_date: Filter datasets updated before this date (YYYY-MM-DD).
-        sort_by: Field to sort by (e.g. "title", "updated_at").
-        sort_direction: "asc" or "desc".
+        status: Filter by dataset status ('ACTIVE', 'DRAFT', 'ARCHIVED').
+        sort: Sort field and direction (e.g. "created:desc", "title:asc").
     """
     params = {
-        "search": query,
+        "title": query,
         "page": page,
-        "perPage": per_page,
-        "data_custodian_id": data_custodian_id,
-        "geographic_coverage": geographic_coverage,
-        "publisher": publisher,
-        "start_date": start_date,
-        "end_date": end_date,
-        "sort_by": sort_by,
-        "sort_direction": sort_direction,
+        "per_page": per_page,
+        "status": status,
+        "sort": sort,
     }
     data = _get("/datasets", params)
     return _paginated_summary(data)
@@ -169,9 +151,6 @@ def search_collections(
     query: Optional[str] = None,
     page: int = 1,
     per_page: int = 10,
-    data_custodian_id: Optional[int] = None,
-    sort_by: Optional[str] = None,
-    sort_direction: Optional[str] = None,
 ) -> str:
     """Search the HDRUK Gateway for Collections / Networks.
 
@@ -180,20 +159,13 @@ def search_collections(
     collection, COVID-19 collection, Secure Data Environment collections).
 
     Args:
-        query: Free-text search term.
+        query: Free-text search term (filters collection names).
         page: Page number (default 1).
         per_page: Results per page (default 10, max 100).
-        data_custodian_id: Filter by data custodian ID.
-        sort_by: Field to sort by.
-        sort_direction: "asc" or "desc".
     """
     params = {
-        "search": query,
         "page": page,
-        "perPage": per_page,
-        "data_custodian_id": data_custodian_id,
-        "sort_by": sort_by,
-        "sort_direction": sort_direction,
+        "per_page": per_page,
     }
     data = _get("/collections", params)
     return _paginated_summary(data)
@@ -226,11 +198,8 @@ def search_data_uses(
     query: Optional[str] = None,
     page: int = 1,
     per_page: int = 10,
-    dataset_id: Optional[int] = None,
     organisation: Optional[str] = None,
     sector: Optional[str] = None,
-    sort_by: Optional[str] = None,
-    sort_direction: Optional[str] = None,
 ) -> str:
     """Search Data Uses / Research Projects on the HDRUK Gateway.
 
@@ -239,24 +208,16 @@ def search_data_uses(
     purpose, under what legal basis, and what outputs were produced.
 
     Args:
-        query: Free-text search term (project title, lay summary, etc.).
+        query: Free-text search term (filters project titles).
         page: Page number (default 1).
         per_page: Results per page (default 10, max 100).
-        dataset_id: Filter data uses linked to a specific dataset ID.
         organisation: Filter by applicant organisation name.
         sector: Filter by sector (e.g. "Academia", "NHS", "Industry").
-        sort_by: Field to sort by.
-        sort_direction: "asc" or "desc".
     """
     params = {
-        "search": query,
+        "project_title": query,
         "page": page,
-        "perPage": per_page,
-        "dataset_id": dataset_id,
-        "organisation": organisation,
-        "sector": sector,
-        "sort_by": sort_by,
-        "sort_direction": sort_direction,
+        "per_page": per_page,
     }
     data = _get("/dur", params)
     return _paginated_summary(data)
@@ -286,11 +247,8 @@ def search_publications(
     query: Optional[str] = None,
     page: int = 1,
     per_page: int = 10,
-    dataset_id: Optional[int] = None,
     year_from: Optional[int] = None,
     year_to: Optional[int] = None,
-    sort_by: Optional[str] = None,
-    sort_direction: Optional[str] = None,
 ) -> str:
     """Search Publications on the HDRUK Gateway.
 
@@ -299,27 +257,24 @@ def search_publications(
     and prior work using specific NHS datasets.
 
     Args:
-        query: Free-text search term (title, abstract, DOI, authors).
+        query: Free-text search term (filters paper titles).
         page: Page number (default 1).
         per_page: Results per page (default 10, max 100).
-        dataset_id: Filter publications linked to a specific dataset ID.
         year_from: Filter publications from this year onwards.
         year_to: Filter publications up to this year.
-        sort_by: Field to sort by.
-        sort_direction: "asc" or "desc".
     """
     params = {
-        "search": query,
+        "paper_title": query,
         "page": page,
-        "perPage": per_page,
-        "dataset_id": dataset_id,
-        "year_from": year_from,
-        "year_to": year_to,
-        "sort_by": sort_by,
-        "sort_direction": sort_direction,
+        "per_page": per_page,
     }
     data = _get("/publications", params)
-    return _paginated_summary(data)
+    items = data.get("data", [])
+    if year_from:
+        items = [i for i in items if int(i.get("year_of_publication", 0)) >= year_from]
+    if year_to:
+        items = [i for i in items if int(i.get("year_of_publication", 9999)) <= year_to]
+    return _paginated_summary({"data": items, "meta": data})
 
 
 # ===========================================================================
@@ -331,10 +286,7 @@ def search_tools(
     query: Optional[str] = None,
     page: int = 1,
     per_page: int = 10,
-    category: Optional[str] = None,
-    programming_language: Optional[str] = None,
-    sort_by: Optional[str] = None,
-    sort_direction: Optional[str] = None,
+    sort: Optional[str] = None,
 ) -> str:
     """Search Analysis Scripts & Software on the HDRUK Gateway.
 
@@ -343,22 +295,16 @@ def search_tools(
     specific datasets or general health data workflows.
 
     Args:
-        query: Free-text search term.
+        query: Free-text search term (filters tool names).
         page: Page number (default 1).
         per_page: Results per page (default 10, max 100).
-        category: Filter by tool category (e.g. "Analysis", "Phenotyping").
-        programming_language: Filter by language (e.g. "R", "Python", "SQL").
-        sort_by: Field to sort by.
-        sort_direction: "asc" or "desc".
+        sort: Sort field and direction (e.g. "name:asc", "created_at:desc").
     """
     params = {
-        "search": query,
+        "name": query,
         "page": page,
-        "perPage": per_page,
-        "category": category,
-        "programming_language": programming_language,
-        "sort_by": sort_by,
-        "sort_direction": sort_direction,
+        "per_page": per_page,
+        "sort": sort,
     }
     data = _get("/tools", params)
     return _paginated_summary(data)
@@ -373,8 +319,6 @@ def search_data_custodians(
     query: Optional[str] = None,
     page: int = 1,
     per_page: int = 10,
-    sort_by: Optional[str] = None,
-    sort_direction: Optional[str] = None,
 ) -> str:
     """Search Data Custodians on the HDRUK Gateway.
 
@@ -383,21 +327,20 @@ def search_data_custodians(
     NHS Scotland, Public Health Wales, etc.
 
     Args:
-        query: Free-text search term (organisation name).
+        query: Free-text search term (filters custodian names client-side).
         page: Page number (default 1).
         per_page: Results per page (default 10, max 100).
-        sort_by: Field to sort by.
-        sort_direction: "asc" or "desc".
     """
     params = {
-        "search": query,
         "page": page,
-        "perPage": per_page,
-        "sort_by": sort_by,
-        "sort_direction": sort_direction,
+        "per_page": per_page,
     }
-    data = _get("/data-custodians", params)
-    return _paginated_summary(data)
+    data = _get("/data_custodian_networks", params)
+    items = data.get("data", [])
+    if query:
+        q = query.lower()
+        items = [i for i in items if q in i.get("name", "").lower()]
+    return _paginated_summary({"data": items, "meta": data})
 
 
 # ===========================================================================
@@ -444,16 +387,45 @@ def search_all(
         page: Page number (default 1).
         per_page: Results per page (default 10).
     """
-    params = {
-        "search": query,
-        "page": page,
-        "perPage": per_page,
+    all_types = {
+        "datasets": ("/datasets", {"title": query}),
+        "collections": ("/collections", {}),
+        "dur": ("/dur", {"project_title": query}),
+        "publications": ("/publications", {"paper_title": query}),
+        "tools": ("/tools", {"name": query}),
+        "data_custodians": ("/data_custodian_networks", {}),
     }
-    if entity_types:
-        params["type"] = entity_types
 
-    data = _get("/search", params)
-    return _paginated_summary(data)
+    if entity_types:
+        requested = [t.strip() for t in entity_types.split(",")]
+        all_types = {k: v for k, v in all_types.items() if k in requested}
+
+    results: dict[str, Any] = {}
+    total = 0
+    with _client() as client:
+        for entity, (path, base_params) in all_types.items():
+            params = dict(base_params)
+            params["page"] = page
+            params["per_page"] = per_page
+            try:
+                resp = client.get(path, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+                items = data.get("data", [])
+                # Client-side filter for collections and custodians (no server-side filter)
+                if entity in ("collections", "data_custodians") and query:
+                    q = query.lower()
+                    items = [i for i in items if q in i.get("name", "").lower()]
+                results[entity] = items
+                total += len(items)
+            except httpx.HTTPStatusError as e:
+                results[entity] = {"error": str(e)}
+
+    return _fmt({
+        "query": query,
+        "total_results": total,
+        "results": results,
+    })
 
 
 # ===========================================================================
