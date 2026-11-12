@@ -467,6 +467,174 @@ def get_dataset_linked_resources(dataset_id: int) -> str:
 
 
 # ===========================================================================
+# TOOL: get_publication_linked_datasets
+# ===========================================================================
+
+@mcp.tool()
+def get_publication_linked_datasets(publication_id: int) -> str:
+    """Get all datasets linked to a specific publication.
+
+    Returns the datasets that were used or described in a publication.
+    Useful for understanding which datasets underlie a research paper.
+
+    Args:
+        publication_id: The integer ID of the publication.
+    """
+    data = _get(f"/publications/{publication_id}/datasets", {})
+    return _fmt(data)
+
+
+# ===========================================================================
+# TOOL: find_datasets_by_publication_topic
+# ===========================================================================
+
+@mcp.tool()
+def find_datasets_by_publication_topic(
+    topic: str,
+    max_publications: int = 20,
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+) -> str:
+    """Find datasets used in publications about a specific topic.
+
+    This workflow:
+    1. Searches for publications matching the topic (e.g., "Myocardial Infarction")
+    2. For each publication, retrieves the linked datasets from the publication detail
+    3. Aggregates and deduplicates datasets across all publications
+    4. Returns a summary of datasets used in research on this topic
+
+    Args:
+        topic: The research topic to search for (e.g., "Myocardial Infarction", "COVID-19", "Diabetes")
+        max_publications: Maximum number of publications to analyze (default 20)
+        year_from: Filter publications from this year onwards
+        year_to: Filter publications up to this year
+    """
+    # Step 1: Search for publications on the topic
+    pub_params = {
+        "paper_title": topic,
+        "page": 1,
+        "per_page": max_publications,
+    }
+    pub_data = _get("/publications", pub_params)
+    publications = pub_data.get("data", [])
+
+    # Apply year filters if provided
+    if year_from:
+        publications = [p for p in publications if int(p.get("year_of_publication", 0)) >= year_from]
+    if year_to:
+        publications = [p for p in publications if int(p.get("year_of_publication", 9999)) <= year_to]
+
+    if not publications:
+        return _fmt({
+            "topic": topic,
+            "message": f"No publications found for topic: {topic}",
+            "datasets": [],
+        })
+
+    # Step 2: For each publication, get linked datasets from publication detail
+    all_datasets = {}
+    publication_details = []
+
+    with _client() as client:
+        for pub in publications:
+            pub_id = pub.get("id")
+            pub_title = pub.get("paper_title", "Unknown")
+            pub_year = pub.get("year_of_publication", "Unknown")
+
+            try:
+                resp = client.get(f"/publications/{pub_id}")
+                resp.raise_for_status()
+                pub_detail = resp.json()
+                datasets = pub_detail.get("data", {}).get("datasets", [])
+
+                publication_details.append({
+                    "publication_id": pub_id,
+                    "title": pub_title,
+                    "year": pub_year,
+                    "dataset_count": len(datasets),
+                })
+
+                # Aggregate datasets (deduplicate by ID)
+                for ds in datasets:
+                    ds_id = ds.get("id")
+                    if ds_id and ds_id not in all_datasets:
+                        all_datasets[ds_id] = ds
+
+            except httpx.HTTPStatusError as e:
+                publication_details.append({
+                    "publication_id": pub_id,
+                    "title": pub_title,
+                    "year": pub_year,
+                    "error": str(e),
+                })
+
+    # Step 3: Prepare summary
+    dataset_list = list(all_datasets.values())
+
+    # Sort datasets by title
+    dataset_list.sort(key=lambda x: x.get("name", "").lower())
+
+    return _fmt({
+        "topic": topic,
+        "publications_analyzed": len(publication_details),
+        "total_unique_datasets": len(dataset_list),
+        "publications": publication_details,
+        "datasets": [
+            {
+                "id": ds.get("id"),
+                "datasetid": ds.get("datasetid"),
+                "pid": ds.get("pid"),
+                "title": ds.get("name"),
+                "status": ds.get("status"),
+                "link_type": ds.get("link_type"),
+                "created": ds.get("created"),
+                "updated": ds.get("updated"),
+            }
+            for ds in dataset_list
+        ],
+    })
+
+
+# ===========================================================================
+# PROMPT: find_datasets_by_topic
+# ===========================================================================
+
+@mcp.prompt()
+def find_datasets_by_topic(topic: str) -> str:
+    """Find datasets used in publications about a specific health topic.
+
+    This prompt guides the user through discovering which datasets have been
+    used in research publications on a given topic (e.g., "Myocardial Infarction",
+    "COVID-19", "Type 2 Diabetes", "Stroke", "Dementia").
+
+    The workflow:
+    1. Searches for publications matching the topic
+    2. Retrieves all datasets linked to those publications
+    3. Presents a deduplicated list of datasets with key metadata
+
+    Args:
+        topic: The health research topic to investigate
+    """
+    return f"""I want to find all datasets that have been used in research publications about "{topic}".
+
+Please use the `find_datasets_by_publication_topic` tool with:
+- topic: "{topic}"
+- max_publications: 20 (to get a good sample)
+- year_from: 2020 (to focus on recent research)
+
+This will show me:
+1. How many publications were found on this topic
+2. Which datasets were used across those publications
+3. Key details about each dataset (custodian, keywords, status)
+
+This is useful for:
+- Understanding what data is available for {topic} research
+- Finding datasets used in high-impact publications
+- Identifying data custodians for {topic} research
+- Planning new studies using proven datasets"""
+
+
+# ===========================================================================
 # Entry point
 # ===========================================================================
 
